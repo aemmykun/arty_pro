@@ -1,0 +1,85 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    function tokenTenant() {
+      return request.auth.token.tenant_id;
+    }
+
+    function tokenRole() {
+      return request.auth.token.role;
+    }
+
+    function sameTenant() {
+      return signedIn()
+        && resource.data.tenant_id == tokenTenant();
+    }
+
+    function sameTenantIncoming() {
+      return signedIn()
+        && request.resource.data.tenant_id == tokenTenant();
+    }
+
+    function isManager() {
+      return signedIn()
+        && tokenRole() in ["MGR", "ADMIN"];
+    }
+
+    function isSupervisorOrManager() {
+      return signedIn()
+        && tokenRole() in ["SV", "MGR", "ADMIN"];
+    }
+
+    match /tasks/{taskId} {
+      allow read: if sameTenant()
+        && (
+          resource.data.assigned_to == request.auth.uid
+          || isSupervisorOrManager()
+        );
+
+      allow create: if sameTenantIncoming()
+        && isSupervisorOrManager();
+
+      allow update: if sameTenant()
+        && sameTenantIncoming()
+        && (
+          resource.data.assigned_to == request.auth.uid
+          || isSupervisorOrManager()
+        );
+
+      allow delete: if sameTenant() && isManager();
+    }
+
+    match /hotel_settings/{tenantId} {
+      allow read: if signedIn()
+        && tenantId == tokenTenant()
+        && isManager();
+
+      allow write: if signedIn()
+        && tenantId == tokenTenant()
+        && tokenRole() == "ADMIN";
+    }
+
+    match /users/{userId} {
+      allow read: if signedIn()
+        && (
+          userId == request.auth.uid
+          || isSupervisorOrManager()
+        )
+        && resource.data.tenant_id == tokenTenant();
+
+      allow write: if signedIn()
+        && tokenRole() == "ADMIN"
+        && request.resource.data.tenant_id == tokenTenant();
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
