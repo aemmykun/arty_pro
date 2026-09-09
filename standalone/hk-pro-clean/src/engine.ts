@@ -86,13 +86,10 @@ export class HousekeepingEngine {
       ...state,
       rooms: state.rooms.map((r) =>
         r.roomId === room.roomId && sameScope(r, room)
-          ? {
-              ...r,
-              status: "DIRTY",
-              currentStayRef: undefined,
-              assignedStaffId: undefined,
-              updatedAt: now,
-            }
+          ? (() => {
+              const { currentStayRef: _stay, assignedStaffId: _assigned, ...rest } = r;
+              return { ...rest, status: "DIRTY" as const, updatedAt: now };
+            })()
           : r,
       ),
       tasks: [...state.tasks, cleanTask],
@@ -178,7 +175,7 @@ export class HousekeepingEngine {
           ? {
               ...r,
               status: nextRoomStatus,
-              lastCleanedAt: task.taskType === "CLEAN" ? now : r.lastCleanedAt,
+              ...(task.taskType === "CLEAN" ? { lastCleanedAt: now } : {}),
               updatedAt: now,
             }
           : r,
